@@ -33,12 +33,28 @@ jobs:
 
       - name: Prepare Keystore & Environment
         run: |
-          # Reconstruct debug.keystore if base64 is present
+          # 1. Restore from base64 if present
           if [ -f "debug.keystore.base64" ]; then
-            base64 -d debug.keystore.base64 > debug.keystore
-            echo "debug.keystore restored successfully."
+            base64 -d debug.keystore.base64 > debug.keystore 2>/dev/null || true
           fi
-          # Ensure .env file exists for Secrets Gradle plugin
+
+          # 2. If debug.keystore does not exist, generate a standard debug keystore
+          if [ ! -f "debug.keystore" ]; then
+            echo "Generating debug.keystore via keytool..."
+            keytool -genkey -v -keystore debug.keystore \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+
+          echo "Keystore ready:"
+          ls -la debug.keystore
+
+          # 3. Ensure .env exists for Secrets Gradle plugin
           touch .env
           if [ -f ".env.example" ]; then
             cp .env.example .env
