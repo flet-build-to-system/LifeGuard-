@@ -20,6 +20,11 @@ class LifeGuardPreferences(private val context: Context) {
         val KEY_PIN_PROTECTION_ENABLED = booleanPreferencesKey("pin_protection_enabled")
         val KEY_SECURITY_PIN = stringPreferencesKey("security_pin")
         val KEY_IS_DARK_THEME = booleanPreferencesKey("is_dark_theme")
+        val KEY_APP_RESTRICTION_MASTER_ENABLED = booleanPreferencesKey("app_restriction_master_enabled")
+    }
+
+    val isAppRestrictionMasterEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_APP_RESTRICTION_MASTER_ENABLED] ?: true
     }
 
     val protectionProfile: Flow<String> = context.dataStore.data.map { prefs ->
@@ -69,6 +74,12 @@ class LifeGuardPreferences(private val context: Context) {
     suspend fun setNightSleepProtection(enabled: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[KEY_NIGHT_SLEEP_PROTECTION] = enabled
+        }
+    }
+
+    suspend fun setAppRestrictionMasterEnabled(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_APP_RESTRICTION_MASTER_ENABLED] = enabled
         }
     }
 }

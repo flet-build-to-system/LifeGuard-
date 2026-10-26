@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.TrendingDown
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -39,9 +40,11 @@ fun SocialControlScreen(
 ) {
     val context = LocalContext.current
     val db = remember { LifeGuardDatabase.getInstance(context) }
+    val prefs = remember { com.example.data.preferences.LifeGuardPreferences(context) }
     val deviceRepo = remember { DeviceManagerRepository(context) }
     val coroutineScope = rememberCoroutineScope()
 
+    val isMasterEnabled by prefs.isAppRestrictionMasterEnabled.collectAsState(initial = true)
     val restrictions by db.appRestrictionDao().getAllRestrictions().collectAsState(initial = emptyList())
     var installedApps by remember { mutableStateOf<List<InstalledAppInfo>>(emptyList()) }
     var appsUsageToday by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
@@ -94,6 +97,66 @@ fun SocialControlScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
                 )
+            }
+        }
+
+        // Master App Restriction Switch Card
+        item {
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isMasterEnabled) EmeraldHealth.copy(alpha = 0.15f)
+                    else MaterialTheme.colorScheme.surfaceVariant
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("app_restriction_master_card")
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(18.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = if (isMasterEnabled) Icons.Default.Lock else Icons.Default.LockOpen,
+                                contentDescription = null,
+                                tint = if (isMasterEnabled) EmeraldHealth else MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = if (isMasterEnabled) "خاصية التقييد: مفعّلة ونشطة" else "خاصية التقييد: متوقفة ومقفلة",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isMasterEnabled) EmeraldHealth else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = if (isMasterEnabled)
+                                "يقوم النظام بمراقبة استخدام التطبيقات المقيدة، وفرض وقفات التنفس، والحظر الفوري عند تجاوز الحد اليومي."
+                            else
+                                "تم إيقاف نظام التقييد مؤقتاً — لن يتم حظر أي تطبيق أو إظهار شاشات التوقف حتى تعيد تفعيله.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+                            lineHeight = 18.sp
+                        )
+                    }
+
+                    Switch(
+                        checked = isMasterEnabled,
+                        onCheckedChange = { enabled ->
+                            coroutineScope.launch {
+                                prefs.setAppRestrictionMasterEnabled(enabled)
+                            }
+                        },
+                        modifier = Modifier.testTag("app_restriction_master_toggle")
+                    )
+                }
             }
         }
 
@@ -174,7 +237,7 @@ fun SocialControlScreen(
             ) {
                 Column(modifier = Modifier.padding(18.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.TrendingDown, contentDescription = null, tint = EmeraldHealth)
+                        Icon(Icons.AutoMirrored.Filled.TrendingDown, contentDescription = null, tint = EmeraldHealth)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "خطة التخفيض التدريجي (10% أسبوعياً)",
@@ -221,6 +284,19 @@ fun SocialControlScreen(
         items(restrictions, key = { it.packageName }) { app ->
             val todayUsed = appsUsageToday[app.packageName] ?: 0
             val isExceeded = todayUsed >= app.dailyLimitMinutes
+
+            val currentHours = app.dailyLimitMinutes / 60
+            val currentMins = app.dailyLimitMinutes % 60
+
+            val formattedLimit = buildString {
+                if (currentHours > 0) {
+                    append("$currentHours ساعة ")
+                    if (currentMins > 0) append("و $currentMins دقيقة")
+                } else {
+                    append("$currentMins دقيقة")
+                }
+                append(" (إجمالي: ${app.dailyLimitMinutes} دقيقة)")
+            }
 
             Card(
                 shape = RoundedCornerShape(16.dp),
@@ -271,15 +347,85 @@ fun SocialControlScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
-                    // Daily Limit Slider
+                    // Daily Limit Header with Hours & Minutes Display
                     Text(
-                        text = "تعديل الحد اليومي: ${app.dailyLimitMinutes} دقيقة",
-                        style = MaterialTheme.typography.labelSmall
+                        text = "الحد اليومي المسموح: $formattedLimit",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = EmeraldHealth
                     )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Hours Selector Chips
+                    Text(
+                        text = "الساعات:",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf(0, 1, 2, 3, 4, 5).forEach { hour ->
+                            val isSelected = (currentHours == hour)
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = {
+                                    val newTotal = (hour * 60) + currentMins
+                                    val safeTotal = if (newTotal <= 0) 5 else newTotal
+                                    coroutineScope.launch {
+                                        db.appRestrictionDao().upsertRestriction(
+                                            app.copy(dailyLimitMinutes = safeTotal)
+                                        )
+                                    }
+                                },
+                                label = { Text("$hour س", fontSize = 12.sp) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Minutes Selector Chips
+                    Text(
+                        text = "الدقائق:",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf(0, 10, 15, 20, 30, 45).forEach { min ->
+                            val isSelected = (currentMins == min)
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = {
+                                    val newTotal = (currentHours * 60) + min
+                                    val safeTotal = if (newTotal <= 0) 5 else newTotal
+                                    coroutineScope.launch {
+                                        db.appRestrictionDao().upsertRestriction(
+                                            app.copy(dailyLimitMinutes = safeTotal)
+                                        )
+                                    }
+                                },
+                                label = { Text("$min د", fontSize = 12.sp) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Fine-tune Slider
                     Slider(
-                        value = app.dailyLimitMinutes.toFloat(),
+                        value = app.dailyLimitMinutes.coerceIn(5, 360).toFloat(),
                         onValueChange = { newLimit ->
                             coroutineScope.launch {
                                 db.appRestrictionDao().upsertRestriction(
@@ -287,8 +433,8 @@ fun SocialControlScreen(
                                 )
                             }
                         },
-                        valueRange = 5f..180f,
-                        steps = 34,
+                        valueRange = 5f..360f,
+                        steps = 70,
                         modifier = Modifier.fillMaxWidth()
                     )
 

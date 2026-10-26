@@ -256,6 +256,7 @@ fun WebFilterScreen() {
                             onClick = {
                                 val clean = customDomainInput.trim().lowercase()
                                     .removePrefix("https://").removePrefix("http://").removePrefix("www.")
+                                    .substringBefore("/").substringBefore(":")
                                 if (clean.isNotEmpty()) {
                                     coroutineScope.launch {
                                         db.blockedDomainDao().insertDomains(
@@ -276,6 +277,35 @@ fun WebFilterScreen() {
                             Text("حظر")
                         }
                     }
+                }
+            }
+        }
+
+        // Chrome DoH Notice Card
+        item {
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Info, contentDescription = null, tint = GoldAccent)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "تلميح مهم لمتصفح Google Chrome",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = GoldAccent
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "إذا فتح متصفح كروم موقعاً محجوباً، فهذا بسبب تفعيل ميزة التشفير الخاصة بكروم (Secure DNS) التي تتجاوز حماية النظام. للتأكد من الحظر الكامل:\nافتح كروم -> الإعدادات -> الخصوصية والأمان -> «استخدام نظام أسماء نطاقات آمن» -> اضبطه على «مع موفر الخدمة الحالي» أو عطّله ليمر عبر درع الحماية.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+                        lineHeight = 20.sp
+                    )
                 }
             }
         }

@@ -53,8 +53,17 @@ class LifeGuardDnsVpnService : VpnService() {
             try {
                 val builder = Builder()
                     .addAddress("10.10.0.2", 32)
-                    .addRoute("10.10.0.1", 32) // Route strictly DNS traffic
                     .addDnsServer("10.10.0.1")
+                    .addRoute("10.10.0.1", 32)
+                    .addRoute("10.10.0.2", 32)
+                    // Intercept any queries sent directly to public DNS servers
+                    .addRoute("8.8.8.8", 32)
+                    .addRoute("8.8.4.4", 32)
+                    .addRoute("1.1.1.1", 32)
+                    .addRoute("1.0.0.1", 32)
+                    .addRoute("9.9.9.9", 32)
+                    .addRoute("208.67.222.222", 32)
+                    .addRoute("208.67.220.220", 32)
                     .setSession("LifeGuard Web Shield")
                     .setBlocking(true)
 
@@ -73,7 +82,7 @@ class LifeGuardDnsVpnService : VpnService() {
         val packet = ByteBuffer.allocate(32767)
 
         val upstreamSocket = DatagramSocket().apply {
-            soTimeout = 3000 // 3 second timeout for DNS queries
+            soTimeout = 3000
         }
         protect(upstreamSocket)
         val upstreamIp = InetAddress.getByName(UPSTREAM_FAMILY_DNS)
@@ -95,7 +104,7 @@ class LifeGuardDnsVpnService : VpnService() {
                         val domain = DnsPacketParser.extractDomainFromDnsPacket(packet)
 
                         if (domain != null && isBlocked(domain, blockedDomainDao)) {
-                            // Local Sinkhole NXDOMAIN response
+                            // Local Sinkhole 0.0.0.0 response
                             blockedDomainDao.incrementBlockedHits(domain)
                             val blockedResponse = DnsPacketParser.buildBlockedDnsResponse(packet.array(), length)
                             outputStream.write(blockedResponse)
@@ -109,7 +118,6 @@ class LifeGuardDnsVpnService : VpnService() {
                                 val responseDatagram = DatagramPacket(receiveBuffer, receiveBuffer.size)
                                 upstreamSocket.receive(responseDatagram)
 
-                                // Synthesize valid IPv4 + UDP packet wrapping the upstream answer
                                 val forwardedIpPacket = DnsPacketParser.buildForwardedDnsResponsePacket(
                                     requestPacket = packet.array(),
                                     ipHeaderLen = ipHeaderLen,
@@ -141,13 +149,26 @@ class LifeGuardDnsVpnService : VpnService() {
                     packet.clear()
                 }
             } catch (_: Exception) {
-                // Keep packet loop running resiliently
+                // Keep loop resilient
             }
         }
     }
 
     private suspend fun isBlocked(domain: String, dao: com.example.data.local.dao.BlockedDomainDao): Boolean {
-        val parts = domain.split(".")
+        val clean = domain.trim().lowercase().removeSuffix(".")
+
+        // Sinkhole known DoH (DNS-over-HTTPS) endpoints so browsers like Chrome cannot bypass local VPN filtering
+        if (clean == "dns.google" ||
+            clean.endsWith(".dns.google") ||
+            clean.contains("cloudflare-dns.com") ||
+            clean.contains("doh.opendns.com") ||
+            clean.contains("dns.quad9.net") ||
+            clean.contains("dns.nextdns.io")
+        ) {
+            return true
+        }
+
+        val parts = clean.split(".")
         for (i in parts.indices) {
             val subDomain = parts.subList(i, parts.size).joinToString(".")
             if (dao.isDomainBlocked(subDomain)) {
