@@ -20,11 +20,18 @@ import com.example.ui.navigation.Screen
 import com.example.ui.social.SocialControlScreen
 import com.example.ui.theme.LifeGuardTheme
 import com.example.ui.webfilter.WebFilterScreen
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
     private var pendingInterventionApp by mutableStateOf<String?>(null)
     private var pendingDelaySeconds by mutableIntStateOf(10)
+    private var pendingIsLimitExceeded by mutableStateOf(false)
+    private var pendingUsedMinutes by mutableIntStateOf(0)
+    private var pendingLimitMinutes by mutableIntStateOf(0)
+    private var pendingPackage by mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -96,11 +103,14 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    // Mindful Breathing Fullscreen Overlay if an app was intercepted or demo was requested
+                    // Mindful Breathing / Limit Exceeded Overlay
                     pendingInterventionApp?.let { appName ->
                         BreathingExerciseOverlay(
                             targetAppName = appName,
                             delaySeconds = pendingDelaySeconds,
+                            isLimitExceeded = pendingIsLimitExceeded,
+                            usedMinutes = pendingUsedMinutes,
+                            limitMinutes = pendingLimitMinutes,
                             onDelayCompleted = {
                                 pendingInterventionApp = null
                             },
@@ -114,6 +124,19 @@ class MainActivity : ComponentActivity() {
                                 try {
                                     startActivity(homeIntent)
                                 } catch (_: Exception) {}
+                            },
+                            onEmergencyExtend = {
+                                val pkg = pendingPackage
+                                if (pkg != null) {
+                                    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                                        val dao = com.example.data.local.LifeGuardDatabase.getInstance(applicationContext).appRestrictionDao()
+                                        val r = dao.getRestriction(pkg)
+                                        if (r != null) {
+                                            dao.upsertRestriction(r.copy(dailyLimitMinutes = r.dailyLimitMinutes + 5))
+                                        }
+                                    }
+                                }
+                                pendingInterventionApp = null
                             }
                         )
                     }
@@ -131,6 +154,10 @@ class MainActivity : ComponentActivity() {
         if (intent?.getStringExtra("NAVIGATE_TO") == "INTERVENTION") {
             pendingInterventionApp = intent.getStringExtra("APP_NAME") ?: "هذا التطبيق"
             pendingDelaySeconds = intent.getIntExtra("DELAY_SECONDS", 10)
+            pendingIsLimitExceeded = intent.getBooleanExtra("IS_LIMIT_EXCEEDED", false)
+            pendingUsedMinutes = intent.getIntExtra("USED_MINUTES", 0)
+            pendingLimitMinutes = intent.getIntExtra("LIMIT_MINUTES", 0)
+            pendingPackage = intent.getStringExtra("TARGET_PACKAGE")
         }
     }
 }

@@ -30,7 +30,8 @@ class LifeGuardDnsVpnService : VpnService() {
         const val ACTION_STOP = "com.example.service.vpn.STOP"
         private const val NOTIFICATION_ID = 2001
         private const val CHANNEL_ID = "lifeguard_vpn_channel"
-        private const val UPSTREAM_FAMILY_DNS = "1.1.1.3" // Cloudflare Family (blocks malware + adult content)
+        private const val UPSTREAM_FAMILY_DNS = "1.1.1.3" // Cloudflare 1.1.1.3 (Malware + Adult Blocker)
+        private const val BACKUP_DNS = "8.8.8.8"
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -52,8 +53,8 @@ class LifeGuardDnsVpnService : VpnService() {
             try {
                 val builder = Builder()
                     .addAddress("10.10.0.2", 32)
-                    .addRoute("1.1.1.3", 32)
-                    .addDnsServer("10.10.0.2")
+                    .addRoute("10.10.0.1", 32) // Route strictly DNS traffic
+                    .addDnsServer("10.10.0.1")
                     .setSession("LifeGuard Web Shield")
                     .setBlocking(true)
 
@@ -71,10 +72,13 @@ class LifeGuardDnsVpnService : VpnService() {
         val outputStream = FileOutputStream(vpnFileDescriptor)
         val packet = ByteBuffer.allocate(32767)
 
-        val upstreamSocket = DatagramSocket()
+        val upstreamSocket = DatagramSocket().apply {
+            soTimeout = 3000 // 3 second timeout for DNS queries
+        }
         protect(upstreamSocket)
         val upstreamIp = InetAddress.getByName(UPSTREAM_FAMILY_DNS)
-        val buffer = ByteArray(32767)
+        val backupIp = InetAddress.getByName(BACKUP_DNS)
+        val receiveBuffer = ByteArray(4096)
 
         val blockedDomainDao = LifeGuardDatabase.getInstance(applicationContext).blockedDomainDao()
 
@@ -83,31 +87,61 @@ class LifeGuardDnsVpnService : VpnService() {
                 val length = inputStream.read(packet.array())
                 if (length > 0) {
                     packet.limit(length)
-                    val domain = DnsPacketParser.extractDomainFromDnsPacket(packet)
+                    val ipHeaderLen = (packet.get(0).toInt() and 0x0F) * 4
+                    val dnsOffset = ipHeaderLen + 8
+                    val dnsPayloadLength = length - dnsOffset
 
-                    if (domain != null && isBlocked(domain, blockedDomainDao)) {
-                        blockedDomainDao.incrementBlockedHits(domain)
-                        val response = DnsPacketParser.buildBlockedDnsResponse(packet.array(), length)
-                        outputStream.write(response)
-                    } else {
-                        val ipHeaderLen = (packet.array()[0].toInt() and 0x0F) * 4
-                        val dnsOffset = ipHeaderLen + 8
-                        val dnsPayloadLength = length - dnsOffset
-                        if (dnsPayloadLength > 0 && dnsOffset < length) {
+                    if (dnsPayloadLength > 0 && dnsOffset < length) {
+                        val domain = DnsPacketParser.extractDomainFromDnsPacket(packet)
+
+                        if (domain != null && isBlocked(domain, blockedDomainDao)) {
+                            // Local Sinkhole NXDOMAIN response
+                            blockedDomainDao.incrementBlockedHits(domain)
+                            val blockedResponse = DnsPacketParser.buildBlockedDnsResponse(packet.array(), length)
+                            outputStream.write(blockedResponse)
+                        } else {
+                            // Forward query to upstream secure Family DNS
                             val dnsQueryPacket = DatagramPacket(
                                 packet.array(), dnsOffset, dnsPayloadLength, upstreamIp, 53
                             )
-                            upstreamSocket.send(dnsQueryPacket)
+                            try {
+                                upstreamSocket.send(dnsQueryPacket)
+                                val responseDatagram = DatagramPacket(receiveBuffer, receiveBuffer.size)
+                                upstreamSocket.receive(responseDatagram)
 
-                            val responseDatagram = DatagramPacket(buffer, buffer.size)
-                            upstreamSocket.receive(responseDatagram)
-                            outputStream.write(responseDatagram.data, 0, responseDatagram.length)
+                                // Synthesize valid IPv4 + UDP packet wrapping the upstream answer
+                                val forwardedIpPacket = DnsPacketParser.buildForwardedDnsResponsePacket(
+                                    requestPacket = packet.array(),
+                                    ipHeaderLen = ipHeaderLen,
+                                    dnsAnswerPayload = responseDatagram.data,
+                                    dnsAnswerLen = responseDatagram.length
+                                )
+                                outputStream.write(forwardedIpPacket)
+                            } catch (_: Exception) {
+                                // Try fallback DNS if upstream times out
+                                try {
+                                    val backupQueryPacket = DatagramPacket(
+                                        packet.array(), dnsOffset, dnsPayloadLength, backupIp, 53
+                                    )
+                                    upstreamSocket.send(backupQueryPacket)
+                                    val responseDatagram = DatagramPacket(receiveBuffer, receiveBuffer.size)
+                                    upstreamSocket.receive(responseDatagram)
+
+                                    val forwardedIpPacket = DnsPacketParser.buildForwardedDnsResponsePacket(
+                                        requestPacket = packet.array(),
+                                        ipHeaderLen = ipHeaderLen,
+                                        dnsAnswerPayload = responseDatagram.data,
+                                        dnsAnswerLen = responseDatagram.length
+                                    )
+                                    outputStream.write(forwardedIpPacket)
+                                } catch (_: Exception) {}
+                            }
                         }
                     }
                     packet.clear()
                 }
             } catch (_: Exception) {
-                // Ignore transient network breaks
+                // Keep packet loop running resiliently
             }
         }
     }

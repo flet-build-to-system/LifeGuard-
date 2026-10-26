@@ -1,5 +1,10 @@
 package com.example.ui.social
 
+import android.app.usage.UsageStatsManager
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -21,12 +26,12 @@ import com.example.data.local.LifeGuardDatabase
 import com.example.data.local.entity.AppRestrictionEntity
 import com.example.data.repository.DeviceManagerRepository
 import com.example.domain.model.InstalledAppInfo
-import com.example.ui.theme.DarkNavyCard
 import com.example.ui.theme.EmeraldHealth
 import com.example.ui.theme.GoldAccent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.Calendar
 
 @Composable
 fun SocialControlScreen(
@@ -39,13 +44,32 @@ fun SocialControlScreen(
 
     val restrictions by db.appRestrictionDao().getAllRestrictions().collectAsState(initial = emptyList())
     var installedApps by remember { mutableStateOf<List<InstalledAppInfo>>(emptyList()) }
+    var appsUsageToday by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
     var showAddAppDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             val apps = deviceRepo.getInstalledApps()
+
+            val usageMap = mutableMapOf<String, Int>()
+            val cal = Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
+            val stats = usageStatsManager?.queryUsageStats(
+                UsageStatsManager.INTERVAL_DAILY, cal.timeInMillis, System.currentTimeMillis()
+            )
+            stats?.forEach { stat ->
+                val mins = (stat.totalTimeInForeground / (1000 * 60)).toInt()
+                usageMap[stat.packageName] = (usageMap[stat.packageName] ?: 0) + mins
+            }
+
             withContext(Dispatchers.Main) {
                 installedApps = apps
+                appsUsageToday = usageMap
             }
         }
     }
@@ -66,10 +90,78 @@ fun SocialControlScreen(
                     color = MaterialTheme.colorScheme.onBackground
                 )
                 Text(
-                    text = "حدد أوقات استخدام واعية واستبدل التشتت التلقائي بوقفات تنفس هادئة",
+                    text = "حدد حدوداً يومية ذكية واستبدل التشتت التلقائي بوقفات تنفس هادئة",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
                 )
+            }
+        }
+
+        // Accessibility Restricted Settings Helper Card
+        item {
+            Card(
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("accessibility_fix_guide_card")
+            ) {
+                Column(modifier = Modifier.padding(18.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.AccessibilityNew, contentDescription = null, tint = GoldAccent)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "حل مشكلة تعذر تفعيل خدمة الوصول (أندرويد 13 فما فوق)",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = GoldAccent
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "إذا ظهرت لك رسالة «إعداد مقيد - لدواعي الأمان هذا الإعداد غير متاح حالياً»، فهذا قيد أمان تلقائي في أندرويد للتطبيقات المحملة يدوياً. يمكنك فكه خلال ثوانٍ:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+                        lineHeight = 20.sp
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "1️⃣ اضغط على زر «1. فتح معلومات التطبيق» بالأسفل.\n2️⃣ في أعلى زاوية الشاشة، اضغط على النقاط الثلاث (⋮).\n3️⃣ اختر «السماح بالإعدادات المقيدة» (Allow restricted settings) وأدخل رمز القفل.\n4️⃣ اضغط على «2. فتح إمكانية الوصول» وستتمكن من تفعيل الخدمة فوراً!",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                        lineHeight = 22.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                    data = Uri.fromParts("package", context.packageName, null)
+                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                }
+                                context.startActivity(intent)
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("1. معلومات التطبيق (⋮)", fontSize = 11.sp)
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                }
+                                context.startActivity(intent)
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("2. إمكانية الوصول", fontSize = 11.sp)
+                        }
+                    }
+                }
             }
         }
 
@@ -127,9 +219,15 @@ fun SocialControlScreen(
 
         // Restricted Apps List
         items(restrictions, key = { it.packageName }) { app ->
+            val todayUsed = appsUsageToday[app.packageName] ?: 0
+            val isExceeded = todayUsed >= app.dailyLimitMinutes
+
             Card(
                 shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isExceeded) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f)
+                    else MaterialTheme.colorScheme.surface
+                ),
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("app_card_${app.appName}")
@@ -146,11 +244,20 @@ fun SocialControlScreen(
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
-                            Text(
-                                text = "الحد اليومي: ${app.dailyLimitMinutes} دقيقة",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = GoldAccent
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "المستهلك اليوم: $todayUsed دقيقة / الحد: ${app.dailyLimitMinutes} دقيقة",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (isExceeded) MaterialTheme.colorScheme.error else GoldAccent
+                                )
+                                if (isExceeded) {
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Badge(containerColor = MaterialTheme.colorScheme.error) {
+                                        Text("تجاوز الحد ⛔", color = Color.White, modifier = Modifier.padding(horizontal = 4.dp))
+                                    }
+                                }
+                            }
                         }
 
                         // Demo Breathing Button
@@ -180,8 +287,8 @@ fun SocialControlScreen(
                                 )
                             }
                         },
-                        valueRange = 10f..180f,
-                        steps = 16,
+                        valueRange = 5f..180f,
+                        steps = 34,
                         modifier = Modifier.fillMaxWidth()
                     )
 
@@ -192,12 +299,10 @@ fun SocialControlScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "وقفة تنفس واعية إجبارية",
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
+                        Text(
+                            text = "وقفة تنفس واعية إجبارية قبل الدخول",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
                         Switch(
                             checked = app.requiresBreathingExercise,
                             onCheckedChange = { isEnabled ->
@@ -216,11 +321,11 @@ fun SocialControlScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "حظر كامل بعد استنفاد الوقت",
+                            text = "حظر كامل وفوري بعد استنفاد الوقت",
                             style = MaterialTheme.typography.bodyMedium
                         )
                         Switch(
-                            checked = app.isBlocked,
+                            checked = app.isBlocked || isExceeded,
                             onCheckedChange = { isBlocked ->
                                 coroutineScope.launch {
                                     db.appRestrictionDao().updateBlockedStatus(app.packageName, isBlocked)

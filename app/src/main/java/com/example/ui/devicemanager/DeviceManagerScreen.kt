@@ -309,9 +309,21 @@ fun DeviceManagerScreen() {
 
                     PermissionItem(
                         title = "خدمة الوصول (Accessibility)",
-                        desc = "لاكتشاف تطبيقات التواصل في الواجهة وإظهار وقفة التنفس",
+                        desc = "لاكتشاف تطبيقات التواصل في الواجهة وإظهار وقفة التنفس وحظر التطبيق بعد انتهاء الوقت",
                         onClick = {
                             val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                            }
+                            context.startActivity(intent)
+                        }
+                    )
+
+                    PermissionItem(
+                        title = "فك الإعدادات المقيدة لأندرويد 13+ (إذا تعذر تشغيل إمكانية الوصول)",
+                        desc = "افتح صفحة التطبيق واضغط على النقاط الثلاث (⋮) ثم «السماح بالإعدادات المقيدة»",
+                        onClick = {
+                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                data = Uri.fromParts("package", context.packageName, null)
                                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
                             }
                             context.startActivity(intent)
