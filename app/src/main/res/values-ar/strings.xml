@@ -1,0 +1,26 @@
+<resources>
+    <string name="app_name">حارس الحياة</string>
+    <string name="tagline">إدارة ذكية للهاتف والتحكم الذاتي ومكافحة الإدمان الرقمي</string>
+
+    <!-- Navigation -->
+    <string name="nav_dashboard">الرئيسية</string>
+    <string name="nav_social">التواصل</string>
+    <string name="nav_webfilter">درع الويب</string>
+    <string name="nav_impulses">الدوافع</string>
+    <string name="nav_focus">التركيز</string>
+    <string name="nav_device">إدارة الجهاز</string>
+
+    <!-- Accessibility & VPN Disclosures -->
+    <string name="accessibility_disclosure_desc">يستخدم تطبيق حارس الحياة خدمة الوصول لاكتشاف اسم التطبيق في الواجهة لتطبيق حدود الاستخدام المحددة من قبلك فقط. لا يقوم التطبيق بقراءة النصوص أو حفظ المحادثات إطلاقاً.</string>
+    <string name="vpn_running">درع الويب نشط (فلترة DNS محلية)</string>
+    <string name="vpn_stopped">درع الويب متوقف حالياً</string>
+    <string name="focus_running">جلسة التركيز جارية الآن</string>
+    <string name="focus_completed">أحسنت! اكتملت جلسة التركيز بنجاح</string>
+
+    <!-- Mindful Breathing -->
+    <string name="mindful_pause_title">وقفة واعية قبل الدخول</string>
+    <string name="mindful_pause_subtitle">هل استخدام هذا التطبيق الآن يخدم أولوياتك وأهدافك الحقيقية؟</string>
+    <string name="breathe_in">شهيق عميق بهدوء…</string>
+    <string name="breathe_out">زفير بطيء وتفريغ…</string>
+    <string name="mindful_cancel">تراجع، سأستثمر وقتي في أمر أكثر أهمية</string>
+</resources>

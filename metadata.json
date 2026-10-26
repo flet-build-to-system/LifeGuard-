@@ -1,0 +1,6 @@
+{
+  "name": "LifeGuard",
+  "description": "Smart Phone Manager, Digital Self-Control, Pornography & Distraction Blocker",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

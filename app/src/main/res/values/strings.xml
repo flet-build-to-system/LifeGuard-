@@ -1,0 +1,26 @@
+<resources>
+    <string name="app_name">LifeGuard</string>
+    <string name="tagline">Smart Phone Manager &amp; Digital Self-Control</string>
+
+    <!-- Navigation -->
+    <string name="nav_dashboard">Dashboard</string>
+    <string name="nav_social">Social Control</string>
+    <string name="nav_webfilter">Web Shield</string>
+    <string name="nav_impulses">Impulses</string>
+    <string name="nav_focus">Focus Room</string>
+    <string name="nav_device">Device Manager</string>
+
+    <!-- Accessibility & VPN Disclosures -->
+    <string name="accessibility_disclosure_desc">LifeGuard uses window state detection strictly to apply your configured usage limits on distracting applications. It does NOT read screen content, keystrokes, or messages.</string>
+    <string name="vpn_running">Web Shield Active (Local DNS)</string>
+    <string name="vpn_stopped">Web Shield Inactive</string>
+    <string name="focus_running">Focus Session in Progress</string>
+    <string name="focus_completed">Focus Session Completed Successfully!</string>
+
+    <!-- Mindful Breathing -->
+    <string name="mindful_pause_title">Conscious Pause Before Access</string>
+    <string name="mindful_pause_subtitle">Does opening this app serve your actual priorities right now?</string>
+    <string name="breathe_in">Inhale slowly…</string>
+    <string name="breathe_out">Exhale gently…</string>
+    <string name="mindful_cancel">Step back &amp; focus on what matters</string>
+</resources>
